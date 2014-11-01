@@ -6,12 +6,15 @@ require_once('mergeosm.php');
 
 $minAllowedZoom = 11;
 //$serverUrl = "http://localhost/m/";
+//$serverUrl = "http://localhost/fetchtiles/";
 $serverUrl = "http://localhost/fetchtiles/";
+$pathToTiles = "tiles/";
+
 $masterZoom = 12;
 
 //*** Parse Input ****
 //Split URL for processing
-define('INSTALL_FOLDER_DEPTH',2);
+define('INSTALL_FOLDER_DEPTH', 1);
 
 $pathInfo = GetRequestPath();
 $urlExp = explode("/",$pathInfo);
@@ -58,6 +61,16 @@ function ReadGzFileData($filename)
 	return $buffer;
 }
 
+function ReadBz2FileData($filename)
+{
+	$buffer = "";
+	$zh = bz2open($filename,'r') or die("can't open: $php_errormsg");
+	while ($line = bz2gets($zh,1024)) {
+		$buffer .= $line; 
+	}
+	return $buffer;
+}
+
 
 function QueryMapApi($serverUrl, $topleft, $bottomright)
 {
@@ -66,31 +79,31 @@ function QueryMapApi($serverUrl, $topleft, $bottomright)
 	return (file_get_contents($url));*/
 }
 
-function TileToCachedName($zoom, $xtile, $ytile)
+function TileToCachedName($pathToTiles, $zoom, $xtile, $ytile)
 {
-	return "tiles/".$zoom."/".$xtile."/".$ytile.".osm.gz";
+	return $pathToTiles.$zoom."/".$xtile."/".$ytile.".osm.gz";
 }
 
-function CheckParentExists($checkZoom,$zoom, $xtile, $ytile)
+function CheckParentExists($pathToTiles, $checkZoom,$zoom, $xtile, $ytile)
 {
 	$pos = TileToLatLon($zoom,$xtile,$ytile);
 	//print_r($pos);
 	$parentTile = LatLonToTile($checkZoom,$pos[0],$pos[1]);
 	//print_r($parentTile);
-	$parentFiName = TileToCachedName($checkZoom,$parentTile[0],$parentTile[1]);
+	$parentFiName = TileToCachedName($pathToTiles, $checkZoom,$parentTile[0],$parentTile[1]);
 	return file_exists($parentFiName);
 }
 
-function TileFromParent($checkZoom,$zoom, $xtile, $ytile)
+function TileFromParent($pathToTiles, $checkZoom,$zoom, $xtile, $ytile)
 {
 	$pos = TileToLatLon($zoom,$xtile,$ytile);
 	$parentTile = LatLonToTile($checkZoom,$pos[0],$pos[1]);
-	$parentFiName = TileToCachedName($checkZoom,$parentTile[0],$parentTile[1]);
+	$parentFiName = TileToCachedName($pathToTiles, $checkZoom,$parentTile[0],$parentTile[1]);
 	//return gzinflate(file_get_contents($parentFiName));
 	return ReadGzFileData($parentFiName);
 }
 
-function QueryMapApiCached($serverUrl, $zoom, $xtile, $ytile)
+function QueryMapApiCached($serverUrl, $pathToTiles, $zoom, $xtile, $ytile)
 {
 	global $masterZoom;
 	$map = Null;
@@ -100,7 +113,7 @@ function QueryMapApiCached($serverUrl, $zoom, $xtile, $ytile)
 
 	$ageThreshold = 60;	
 
-	$cachedName = TileToCachedName($zoom, $xtile, $ytile);
+	$cachedName = TileToCachedName($pathToTiles, $zoom, $xtile, $ytile);
 	/*if(file_exists($cachedName))
 	{
 		//If the file is more than a threshold in age, delete it
@@ -123,61 +136,61 @@ function QueryMapApiCached($serverUrl, $zoom, $xtile, $ytile)
 	}
 
 	//Generate cached child tile filenames
-	$cachedNameTl = "tiles/".($zoom+1)."/".($xtile*2)."/".($ytile*2).".osm.gz";
-	$cachedNameTr = "tiles/".($zoom+1)."/".($xtile*2+1)."/".($ytile*2).".osm.gz";
-	$cachedNameBl = "tiles/".($zoom+1)."/".($xtile*2)."/".($ytile*2+1).".osm.gz";
-	$cachedNameBr = "tiles/".($zoom+1)."/".($xtile*2+1)."/".($ytile*2+1).".osm.gz";
+	$cachedNameTl = ($zoom+1)."/".($xtile*2)."/".($ytile*2).".osm.gz";
+	$cachedNameTr = ($zoom+1)."/".($xtile*2+1)."/".($ytile*2).".osm.gz";
+	$cachedNameBl = ($zoom+1)."/".($xtile*2)."/".($ytile*2+1).".osm.gz";
+	$cachedNameBr = ($zoom+1)."/".($xtile*2+1)."/".($ytile*2+1).".osm.gz";
 
 	//If lower zoom than master zoom, try to trigger generation of child tiles
 	if($zoom < $masterZoom)
 	{
 		$countTriggered = 0;
-		if(!file_exists($cachedNameTl)) 
+		if(!file_exists($pathToTiles.$cachedNameTl)) 
 		{
 			//echo "Trigger create ".($zoom + 1).",".($xtile*2).",".($ytile*2)."\n";
-			QueryMapApiCached($serverUrl, $zoom + 1, $xtile*2, $ytile*2);
+			QueryMapApiCached($serverUrl, $pathToTiles, $zoom + 1, $xtile*2, $ytile*2);
 			$countTriggered ++;
 		}
-		if(!file_exists($cachedNameTr) and $countTriggered == 0) 
+		if(!file_exists($pathToTiles.$cachedNameTr) and $countTriggered == 0) 
 		{
 			//echo "Trigger create ".($zoom + 1).",".($xtile*2+1).",".($ytile*2)."\n";
-			QueryMapApiCached($serverUrl, $zoom + 1, $xtile*2+1, $ytile*2);
+			QueryMapApiCached($serverUrl, $pathToTiles, $zoom + 1, $xtile*2+1, $ytile*2);
 			$countTriggered ++;
 		}
-		if(!file_exists($cachedNameBl) and $countTriggered == 0) 
+		if(!file_exists($pathToTiles.$cachedNameBl) and $countTriggered == 0) 
 		{
 			//echo "Trigger create ".($zoom + 1).",".($xtile*2).",".($ytile*2+1)."\n";
-			QueryMapApiCached($serverUrl, $zoom + 1, $xtile*2, $ytile*2+1);
+			QueryMapApiCached($serverUrl, $pathToTiles, $zoom + 1, $xtile*2, $ytile*2+1);
 			$countTriggered ++;
 		}
-		if(!file_exists($cachedNameBr) and $countTriggered == 0) 
+		if(!file_exists($pathToTiles.$cachedNameBr) and $countTriggered == 0) 
 		{
 			//echo "Trigger create ".($zoom + 1).",".($xtile*2+1).",".($ytile*2+1)."\n";
-			QueryMapApiCached($serverUrl, $zoom + 1, $xtile*2+1, $ytile*2+1);
+			QueryMapApiCached($serverUrl, $pathToTiles, $zoom + 1, $xtile*2+1, $ytile*2+1);
 			$countTriggered ++;
 		}
 	}
 
 	//Check if we can assemble it from higher level (more zoomed)
-	//clearstatcache(TRUE,$cachedNameTl);
-	//clearstatcache(TRUE,$cachedNameTr);
-	//clearstatcache(TRUE,$cachedNameBl);
-	//clearstatcache(TRUE,$cachedNameBr);
-	//echo "(".file_exists($cachedNameTl)." ".file_exists($cachedNameTr)." ".file_exists($cachedNameBl)." ".file_exists($cachedNameBr).")";
-	$partsExist = (file_exists($cachedNameTl) and file_exists($cachedNameTr) and file_exists($cachedNameBl) and file_exists($cachedNameBr));
+	//clearstatcache(TRUE,$pathToTiles.$cachedNameTl);
+	//clearstatcache(TRUE,$pathToTiles.$cachedNameTr);
+	//clearstatcache(TRUE,$pathToTiles.$cachedNameBl);
+	//clearstatcache(TRUE,$pathToTiles.$cachedNameBr);
+	//echo "(".file_exists($pathToTiles.$cachedNameTl)." ".file_exists($pathToTiles.$cachedNameTr)." ".file_exists($pathToTiles.$cachedNameBl)." ".file_exists($pathToTiles.$cachedNameBr).")";
+	$partsExist = (file_exists($pathToTiles.$cachedNameTl) and file_exists($pathToTiles.$cachedNameTr) and file_exists($pathToTiles.$cachedNameBl) and file_exists($pathToTiles.$cachedNameBr));
 	if($partsExist)
 	{
-		//echo "(".file_exists($cachedNameTl)." ".file_exists($cachedNameTr)." ".file_exists($cachedNameBl)." ".file_exists($cachedNameBr).")";
-		$map = MergeOsm(array($cachedNameTl,$cachedNameTr,$cachedNameBl,$cachedNameBr));
+		//echo "(".file_exists($pathToTiles.$cachedNameTl)." ".file_exists($pathToTiles.$cachedNameTr)." ".file_exists($pathToTiles.$cachedNameBl)." ".file_exists($pathToTiles.$cachedNameBr).")";
+		$map = MergeOsm(array($pathToTiles.$cachedNameTl,$pathToTiles.$cachedNameTr,$pathToTiles.$cachedNameBl,$pathToTiles.$cachedNameBr));
 		//echo $map;
 	}
 
 	//Check if we can assemble it from lower level (less zoomed)
 	if($zoom > $masterZoom)
 	{
-		$exists = CheckParentExists($masterZoom,$zoom, $xtile, $ytile);
+		$exists = CheckParentExists($pathToTiles, $masterZoom,$zoom, $xtile, $ytile);
 		if($exists)
-			return TileFromParent($masterZoom,$zoom, $xtile, $ytile);
+			return TileFromParent($pathToTiles, $masterZoom,$zoom, $xtile, $ytile);
 	}
 
 	//If not at master zoom, return
@@ -310,7 +323,7 @@ foreach($xml->node as $node)
 
 if($outputFormat=="osm")
 {
-$map = QueryMapApiCached($serverUrl, $zoom,$xtile,$ytile);
+$map = QueryMapApiCached($serverUrl, $pathToTiles, $zoom, $xtile, $ytile);
 
 if($map === Null)
 {
@@ -363,7 +376,7 @@ $obj['properties'] = array('natural'=>'coastline');
 array_push($featureList,$obj);
 
 //$mapStr = gzinflate(file_get_contents("sharm.osm.bz2"));
-$mapStr = QueryMapApiCached($serverUrl, $zoom,$xtile,$ytile);
+$mapStr = QueryMapApiCached($serverUrl, $pathToTiles, $zoom, $xtile, $ytile);
 
 if($mapStr === Null)
 {
