@@ -8,7 +8,8 @@ $minAllowedZoom = 11;
 //$serverUrl = "http://localhost/m/";
 //$serverUrl = "http://localhost/fetchtiles/";
 $serverUrl = "http://localhost/fetchtiles/";
-$pathToTiles = "tiles/";
+#$pathToTiles = "tiles/";
+$pathToTiles = "/home/tim/dev/batch-garmin-map/";
 
 $masterZoom = 12;
 
@@ -48,8 +49,8 @@ function ReadGzFileData($filename)
 function ReadBz2FileData($filename)
 {
 	$buffer = "";
-	$zh = bz2open($filename,'r') or die("can't open: $php_errormsg");
-	while ($line = bz2gets($zh,1024)) {
+	$zh = bzopen($filename,'r') or die("can't open: $php_errormsg");
+	while ($line = bzread($zh,1024)) {
 		$buffer .= $line; 
 	}
 	return $buffer;
@@ -81,7 +82,12 @@ function TileFromParent($pathToTiles, $checkZoom,$zoom, $xtile, $ytile)
 	foreach ($parentFiNames as $fina)
 	{
 		if (!file_exists($fina)) continue;
-		return ReadGzFileData($fina);
+		$ext = pathinfo($fina, PATHINFO_EXTENSION);
+		if ($ext == "gz")
+			return ReadGzFileData($fina);
+		if ($ext == "bz2")
+			return ReadBz2FileData($fina);
+		die("Unrecognised extension: ". $ext);
 	}
 
 	return Null;
