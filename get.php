@@ -55,45 +55,40 @@ function ReadBz2FileData($filename)
 	return $buffer;
 }
 
-function TileToCachedName($pathToTiles, $zoom, $xtile, $ytile)
+function TileToCachedNames($pathToTiles, $zoom, $xtile, $ytile)
 {
-	return $pathToTiles.$zoom."/".$xtile."/".$ytile.".osm.gz";
+	return array($pathToTiles.$zoom."/".$xtile."/".$ytile.".osm.gz", $pathToTiles.$zoom."/".$xtile."/".$ytile.".osm.bz2");
 }
 
 function CheckParentExists($pathToTiles, $checkZoom,$zoom, $xtile, $ytile)
 {
 	$pos = TileToLatLon($zoom,$xtile,$ytile);
 	$parentTile = LatLonToTile($checkZoom,$pos[0],$pos[1]);
-	$parentFiName = TileToCachedName($pathToTiles, $checkZoom,$parentTile[0],$parentTile[1]);
-	return file_exists($parentFiName);
+	$parentFiNames = TileToCachedNames($pathToTiles, $checkZoom,$parentTile[0],$parentTile[1]);
+	foreach ($parentFiNames as $fina)
+	{
+		if (file_exists($fina)) return True;
+	}
+	return False;
 }
 
 function TileFromParent($pathToTiles, $checkZoom,$zoom, $xtile, $ytile)
 {
 	$pos = TileToLatLon($zoom,$xtile,$ytile);
 	$parentTile = LatLonToTile($checkZoom,$pos[0],$pos[1]);
-	$parentFiName = TileToCachedName($pathToTiles, $checkZoom,$parentTile[0],$parentTile[1]);
-	return ReadGzFileData($parentFiName);
-}
+	$parentFiNames = TileToCachedNames($pathToTiles, $checkZoom,$parentTile[0],$parentTile[1]);
 
-function QueryMapApiCached($serverUrl, $pathToTiles, $zoom, $xtile, $ytile)
-{
-	global $masterZoom;
-	$map = Null;
-	$topleft = (TileToLatLon($zoom,$xtile,$ytile));
-	$bottomright = (TileToLatLon($zoom,$xtile+1,$ytile+1));
-
-	$ageThreshold = 60;	
-
-	$cachedName = TileToCachedName($pathToTiles, $zoom, $xtile, $ytile);
-
-	//If result is cached, return it
-	if(file_exists($cachedName))
+	foreach ($parentFiNames as $fina)
 	{
-		//Return cached file
-		return ReadGzFileData($cachedName);
+		if (!file_exists($fina)) continue;
+		return ReadGzFileData($fina);
 	}
 
+	return Null;
+}
+
+function CheckChildrenExists($pathToTiles, $masterZoom,$zoom, $xtile, $ytile)
+{
 	//Generate cached child tile filenames
 	$cachedNameTl = ($zoom+1)."/".($xtile*2)."/".($ytile*2).".osm.gz";
 	$cachedNameTr = ($zoom+1)."/".($xtile*2+1)."/".($ytile*2).".osm.gz";
@@ -128,7 +123,28 @@ function QueryMapApiCached($serverUrl, $pathToTiles, $zoom, $xtile, $ytile)
 
 	//Check if we can assemble it from higher level (more zoomed)
 	$partsExist = (file_exists($pathToTiles.$cachedNameTl) and file_exists($pathToTiles.$cachedNameTr) and file_exists($pathToTiles.$cachedNameBl) and file_exists($pathToTiles.$cachedNameBr));
-	if($partsExist)
+}
+
+function QueryMapApiCached($serverUrl, $pathToTiles, $zoom, $xtile, $ytile)
+{
+	global $masterZoom;
+	$map = Null;
+	$topleft = (TileToLatLon($zoom,$xtile,$ytile));
+	$bottomright = (TileToLatLon($zoom,$xtile+1,$ytile+1));
+
+	$ageThreshold = 60;	
+
+	$cachedNames = TileToCachedNames($pathToTiles, $zoom, $xtile, $ytile);
+	//If requested tile is at the master zoom level, return it
+	foreach ($cachedNames as $fina)
+	{	
+		if(!file_exists($fina)) continue;
+		return ReadGzFileData($fina);
+	}
+
+	//Check if we can assemble it from higher level (more zoomed)
+	$childPartsExist = CheckChildrenExists($pathToTiles, $masterZoom,$zoom, $xtile, $ytile);
+	if($childPartsExist)
 	{
 		$map = MergeOsm(array($pathToTiles.$cachedNameTl,$pathToTiles.$cachedNameTr,$pathToTiles.$cachedNameBl,$pathToTiles.$cachedNameBr));
 	}
